@@ -116,6 +116,10 @@
       <div class="big" id="r-nota"></div>
       <div class="hint" id="r-acertos"></div>
       <div class="saved">✓ Nota registrada para o professor</div>
+      <div id="r-segunda" class="hidden" style="margin-top:18px">
+        <p class="hint" style="margin:0">Teve problema de internet? Você ainda pode fazer <b>1 nova tentativa</b>. As duas ficam registradas para o professor.</p>
+        <button class="main" id="btn-segunda2" style="margin-top:10px">Fazer 2ª tentativa</button>
+      </div>
     </div>
   </section>
 
@@ -128,6 +132,10 @@
     <h2>Acesso encerrado</h2>
     <p id="b-msg">Você já realizou este quiz neste aparelho. Não é possível responder novamente.</p>
     <div class="big" id="b-nota" style="font:800 48px/1 Poppins,sans-serif;color:var(--navy);margin:14px 0 4px"></div>
+    <div id="b-segunda" class="hidden">
+      <p style="margin-top:14px">Teve problema de internet ou de conexão? Você ainda tem <b>1 nova tentativa</b>. As duas tentativas ficam registradas para o professor.</p>
+      <button class="main" id="btn-segunda">Fazer 2ª tentativa</button>
+    </div>
   </section>
 </main>
 <footer>UNINASSAU · Semiologia Veterinária · M.V. Pós-Grad. Marcelo Gabriel</footer>
@@ -169,18 +177,6 @@
     $('titulo').textContent = 'Semiologia Veterinária';
     $('subtitulo').textContent = q.subtitulo;
     if (!q.aberto) return show('tela-fechado');
-    var feito = null; try { feito = JSON.parse(localStorage.getItem(DONE)||'null'); } catch(e){}
-    if (feito){ $('b-nota').textContent = feito.nota != null ? fmt(feito.nota) + ' / ' + fmt(feito.max) : ''; if (feito.saiu) $('b-msg').textContent = 'Você saiu da página durante o quiz e perdeu o acesso. Suas respostas até aquele momento foram registradas.'; return show('tela-bloqueado'); }
-    $('turmas').innerHTML = q.turmas.map(function(t){
-      return '<label class="turma"><input type="radio" name="turma" value="'+esc(t)+'"><span>'+esc(t)+'</span></label>';
-    }).join('');
-    $('regras').innerHTML =
-      '<li>São <b>'+q.questoes.length+' questões</b> de múltipla escolha; cada uma vale <b>'+fmt(q.notaMaxima/q.questoes.length)+'</b> (total '+fmt(q.notaMaxima)+' ponto).</li>'+
-      '<li>Você terá <b>'+q.tempo+' segundos por questão</b>. Ao acabar o tempo, a próxima abre sozinha.</li>'+
-      '<li>Não é possível voltar a uma questão anterior. Questão sem resposta conta como errada.</li>'+
-      '<li><b>Não saia desta página</b> (trocar de aba, abrir outro aplicativo, minimizar ou recarregar). Se sair, a atividade é <b>finalizada na hora</b>, enviada com as respostas dadas até ali e você <b>perde o acesso</b>.</li>'+
-      '<li>O quiz só pode ser respondido <b>uma vez</b>.</li>';
-    try { var s = JSON.parse(localStorage.getItem('quizLocomotor_id')||'{}'); if (s.nome) $('nome').value = s.nome; } catch(e){}
     var prog = null; try { prog = JSON.parse(localStorage.getItem(KEY)||'null'); } catch(e){}
     if (prog && prog.aluno && prog.aluno.nome){
       // Retoma de onde parou (recarregar a página não reinicia o tempo)
@@ -189,8 +185,36 @@
       if (motivoSaida || idx >= q.questoes.length){ $('q-nome').textContent = aluno.nome; $('q-turma').textContent = aluno.turma; show('tela-quiz'); return enviar(); }
       return abrirQuiz();
     }
-    show('tela-id');
+    var feito = lerFeito();
+    if (feito){
+      var usadas = feito.tentativas || 1;
+      $('b-nota').textContent = feito.nota != null ? fmt(feito.nota) + ' / ' + fmt(feito.max) : '';
+      if (feito.saiu) $('b-msg').textContent = 'Você saiu da página durante o quiz e a tentativa foi encerrada. Suas respostas até aquele momento foram registradas.';
+      else $('b-msg').textContent = usadas >= MAX_TENT ? 'Você já usou as ' + MAX_TENT + ' tentativas deste quiz neste aparelho. Não é possível responder novamente.' : 'Sua tentativa foi registrada.';
+      $('b-segunda').classList.toggle('hidden', usadas >= MAX_TENT);
+      return show('tela-bloqueado');
+    }
+    montarIdentificacao();
   }).catch(function(e){ $('carregando').textContent = 'Não foi possível carregar o quiz: ' + e; });
+
+  function montarIdentificacao(){
+    var q = quiz;
+    $('turmas').innerHTML = q.turmas.map(function(t){
+      return '<label class="turma"><input type="radio" name="turma" value="'+esc(t)+'"><span>'+esc(t)+'</span></label>';
+    }).join('');
+    $('regras').innerHTML =
+      '<li>São <b>'+q.questoes.length+' questões</b> de múltipla escolha; cada uma vale <b>'+fmt(q.notaMaxima/q.questoes.length)+'</b> (total '+fmt(q.notaMaxima)+' ponto).</li>'+
+      '<li>Você terá <b>'+q.tempo+' segundos por questão</b>. Ao acabar o tempo, a próxima abre sozinha.</li>'+
+      '<li>Não é possível voltar a uma questão anterior. Questão sem resposta conta como errada.</li>'+
+      '<li><b>Não saia desta página</b> (trocar de aba, abrir outro aplicativo, minimizar ou recarregar). Se sair, a tentativa é <b>finalizada na hora</b> e enviada com as respostas dadas até ali.</li>'+
+      '<li>Você tem até <b>'+MAX_TENT+' tentativas</b> (use a 2ª só se tiver problema de internet). As duas ficam registradas para o professor.</li>'+
+      (tentativaAtual() > 1 ? '<li><b>Esta é a sua 2ª e última tentativa.</b></li>' : '');
+    try { var s = JSON.parse(localStorage.getItem('quizLocomotor_id')||'{}'); if (s.nome) $('nome').value = s.nome; } catch(e){}
+    var f = lerFeito();
+    if (f && f.turma){ var r = document.querySelector('input[name=turma][value="'+f.turma+'"]'); if (r) r.checked = true; }
+    $('btn-iniciar').textContent = tentativaAtual() > 1 ? 'Iniciar 2ª tentativa' : 'Iniciar quiz';
+    show('tela-id');
+  }
 
   $('btn-iniciar').onclick = function(){
     var nome = $('nome').value.replace(/\s+/g,' ').trim();
@@ -198,13 +222,20 @@
     if (nome.split(' ').length < 2 || nome.length < 5) return $('err-id').textContent = 'Digite seu nome completo (nome e sobrenome).';
     if (!t) return $('err-id').textContent = 'Selecione sua turma: Manhã ou Noite.';
     $('err-id').textContent = '';
-    aluno = { nome: nome, turma: t.value, envioId: Date.now().toString(36) + Math.random().toString(36).slice(2) };
+    aluno = { nome: nome, turma: t.value, tentativa: tentativaAtual(), envioId: Date.now().toString(36) + Math.random().toString(36).slice(2) };
     try { localStorage.setItem('quizLocomotor_id', JSON.stringify({nome:nome})); } catch(e){}
     $('q-nome').textContent = nome; $('q-turma').textContent = t.value;
     iniciar();
   };
 
   // ---------- Fluxo com tempo por questão ----------
+  var MAX_TENT = 2;
+  function lerFeito(){ try { return JSON.parse(localStorage.getItem(DONE)||'null'); } catch(e){ return null; } }
+  function tentativaAtual(){ var f = lerFeito(); return f ? (f.tentativas || 1) + 1 : 1; }
+  $('btn-segunda2').onclick = function(){ montarIdentificacao(); };
+  $('btn-segunda').onclick = function(){
+    montarIdentificacao();
+  };
   var KEY = 'quizLocomotor_prog', DONE = 'quizLocomotor_feito', idx = 0, deadline = 0, tick = null, enviando = false;
   function salvarProg(){ try { localStorage.setItem(KEY, JSON.stringify({aluno:aluno, respostas:respostas, idx:idx, deadline:deadline, motivo:motivoSaida})); } catch(e){} }
   var motivoSaida = '';
@@ -224,7 +255,7 @@
   });
   function limparProg(){ try { localStorage.removeItem(KEY); } catch(e){} }
 
-  function iniciar(){ idx = 0; respostas = {}; deadline = 0; abrirQuiz(); }
+  function iniciar(){ idx = 0; respostas = {}; deadline = 0; motivoSaida = ''; enviando = false; $('timer').classList.remove('hidden'); abrirQuiz(); }
   function abrirQuiz(){
     $('q-nome').textContent = aluno.nome; $('q-turma').textContent = aluno.turma;
     show('tela-quiz'); mostrarQuestao();
@@ -281,8 +312,8 @@
     $('timer').classList.add('hidden');
     $('questao').innerHTML = '<p class="center" style="margin:8px 0">Enviando suas respostas…</p>';
     $('btn-prox').disabled = true; $('btn-prox').textContent = 'Enviando…'; $('err-quiz').textContent = '';
-    server('enviarRespostas', { nome: aluno.nome, turma: aluno.turma, respostas: respostas, motivo: motivoSaida, envioId: aluno.envioId })
-      .then(function(r){ limparProg(); try { localStorage.setItem(DONE, JSON.stringify({nota:r.nota, max:r.notaMaxima, saiu:!!r.motivo})); } catch(e){} mostrarResultado(r); })
+    server('enviarRespostas', { nome: aluno.nome, turma: aluno.turma, respostas: respostas, motivo: motivoSaida, envioId: aluno.envioId, tentativa: aluno.tentativa || 1 })
+      .then(function(r){ limparProg(); try { localStorage.setItem(DONE, JSON.stringify({nota:r.nota, max:r.notaMaxima, saiu:!!r.motivo, tentativas: aluno.tentativa || 1, turma: aluno.turma})); } catch(e){} mostrarResultado(r); })
       .catch(function(e){
         enviando = false;
         $('questao').innerHTML = '<p class="center" style="margin:8px 0">Suas respostas estão guardadas neste aparelho.</p>';
@@ -295,9 +326,10 @@
   function mostrarResultado(r){
     $('r-quem').textContent = r.nome + ' · ' + r.turma;
     $('r-aviso').classList.toggle('hidden', !r.motivo);
-    $('r-aviso').textContent = r.motivo ? 'Atividade encerrada porque você saiu da página durante o quiz. As questões seguintes foram consideradas sem resposta e o acesso foi bloqueado.' : '';
+    $('r-aviso').textContent = r.motivo ? 'Tentativa encerrada porque você saiu da página durante o quiz. As questões seguintes foram consideradas sem resposta.' : '';
     $('r-nota').innerHTML = esc(fmt(r.nota)) + '<small> / ' + esc(fmt(r.notaMaxima)) + '</small>';
     $('r-acertos').textContent = r.acertos + ' de ' + r.total + ' acertos';
+    $('r-segunda').classList.toggle('hidden', (aluno.tentativa || 1) >= MAX_TENT);
     show('tela-res');
   }
 })();
